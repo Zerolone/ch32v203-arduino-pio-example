@@ -46,6 +46,7 @@ src目录中有文件：
 
 ------
 以上代码均采用自制pcb与扩展板测试
+![开发板][1]
 
-!(pic/ch32vx03.jpg)
-!(pic/ch32vx03-ext.jpg)
+
+  [1]: pic/ch32vx03.jpg
