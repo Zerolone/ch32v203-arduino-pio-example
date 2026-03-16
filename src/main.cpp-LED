@@ -1,0 +1,22 @@
+#include <Arduino.h>
+
+void setup() {
+  pinMode(PA15, OUTPUT);
+  pinMode(PB3, OUTPUT);
+  
+  Serial.begin(115200);  
+  Serial.println("Hello, world!");
+}
+
+void loop() {
+  Serial1.println("Loop");
+  
+  // 输出模式：控制PD0高低电平
+  digitalWrite(PA15, HIGH);  // PD0输出高电平
+  digitalWrite(PB3,  LOW);  // PD0输出高电平
+  delay(500);
+  
+  digitalWrite(PA15, LOW);   // PD0输出低电平
+  digitalWrite(PB3,  HIGH);   // PD0输出低电平
+  delay(500);
+}

@@ -1,0 +1,73 @@
+#include <Arduino.h>
+#include <Adafruit_NeoPixel.h>
+
+#define PIN1        PB4  // PB4 引脚对应的数字引脚编号
+#define PIN2        PB5  // PB5 引脚对应的数字引脚编号
+#define NUM_PIXELS  4   // 每组有 4 个 WS2812 LED
+
+// 创建两个 NeoPixel 对象，分别控制两个引脚上的 4 颗 LED
+Adafruit_NeoPixel strip1(NUM_PIXELS, PIN1, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip2(NUM_PIXELS, PIN2, NEO_GRB + NEO_KHZ800);
+
+// 亮度因子，范围 0 到 255
+#define BRIGHTNESS 11
+
+// 调整亮度的函数
+uint32_t adjustBrightness(uint32_t color, uint8_t brightness) {
+  uint8_t r = (color >> 16) & 0xFF;  // 获取红色分量
+  uint8_t g = (color >> 8) & 0xFF;   // 获取绿色分量
+  uint8_t b = color & 0xFF;          // 获取蓝色分量
+  
+  // 按照亮度因子调整 RGB 分量
+  r = (r * brightness) / 255;
+  g = (g * brightness) / 255;
+  b = (b * brightness) / 255;
+  
+  // 返回新的颜色值
+  return strip1.Color(r, g, b);
+}
+
+void setup() {
+  strip1.begin();
+  strip1.show(); // 初始化并关闭第一组 LED
+
+  strip2.begin();
+  strip2.show(); // 初始化并关闭第二组 LED
+}
+
+void loop() {
+  // 设置第一组 LED 为红色，并调整亮度
+  uint32_t color1 = strip1.Color(255, 0, 0);  // 红色
+  color1 = adjustBrightness(color1, BRIGHTNESS);  // 调整亮度
+  for (int i = 0; i < NUM_PIXELS; i++) {
+    strip1.setPixelColor(i, color1);  // 设置每颗 LED 的颜色
+  }
+  strip1.show();  // 更新显示
+  delay(1000);    // 延迟 1 秒
+
+  // 设置第二组 LED 为绿色，并调整亮度
+  uint32_t color2 = strip2.Color(0, 255, 0);  // 绿色
+  color2 = adjustBrightness(color2, BRIGHTNESS);  // 调整亮度
+  for (int i = 0; i < NUM_PIXELS; i++) {
+    strip2.setPixelColor(i, color2);  // 设置每颗 LED 的颜色
+  }
+  strip2.show();  // 更新显示
+  delay(1000);    // 延迟 1 秒
+
+  // 切换颜色并调整亮度
+  uint32_t color3 = strip1.Color(0, 0, 255);  // 蓝色
+  color3 = adjustBrightness(color3, BRIGHTNESS);  // 调整亮度
+  for (int i = 0; i < NUM_PIXELS; i++) {
+    strip1.setPixelColor(i, color3);  // 设置每颗 LED 的颜色
+  }
+  strip1.show();  // 更新显示
+  delay(1000);    // 延迟 1 秒
+
+  uint32_t color4 = strip2.Color(255, 255, 0);  // 黄色
+  color4 = adjustBrightness(color4, BRIGHTNESS);  // 调整亮度
+  for (int i = 0; i < NUM_PIXELS; i++) {
+    strip2.setPixelColor(i, color4);  // 设置每颗 LED 的颜色
+  }
+  strip2.show();  // 更新显示
+  delay(1000);    // 延迟 1 秒
+}

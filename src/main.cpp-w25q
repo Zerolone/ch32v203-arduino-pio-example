@@ -1,0 +1,186 @@
+#include <SPI.h>
+
+// Configure CS pin (PB0 of CH32V203, customizable)
+#define W25Q16_CS PB0
+
+// W25Q16 core commands
+#define W25Q_WRITE_ENABLE     0x06  // Write enable
+#define W25Q_READ_STATUS_REG1 0x05  // Read status register 1
+#define W25Q_READ_DATA        0x03  // Read data
+#define W25Q_PAGE_PROGRAM     0x02  // Page program
+#define W25Q_SECTOR_ERASE     0x20  // Sector erase (4KB)
+#define W25Q_READ_ID          0x90  // Read device ID
+
+// W25Q16 parameters
+#define W25Q16_PAGE_SIZE      256   // 256 bytes per page
+#define W25Q16_SECTOR_SIZE    4096  // 4096 bytes per sector
+#define W25Q16_MAX_ADDR       0x1FFFFF  // Max address for 2MB capacity
+
+// Wait for W25Q16 busy state to end (CH32V203 SPI adaptation)
+void W25Q16_WaitBusy() {
+  digitalWrite(W25Q16_CS, LOW);
+  SPI.transfer(W25Q_READ_STATUS_REG1);
+  // Busy bit (BIT0) = 1 means busy, wait until 0
+  while ((SPI.transfer(0xFF) & 0x01) == 0x01);
+  digitalWrite(W25Q16_CS, HIGH);
+}
+
+// Write enable
+void W25Q16_WriteEnable() {
+  digitalWrite(W25Q16_CS, LOW);
+  SPI.transfer(W25Q_WRITE_ENABLE);
+  digitalWrite(W25Q16_CS, HIGH);
+  delayMicroseconds(10); // Short delay for CH32V203 to ensure command takes effect
+}
+
+// Read W25Q16 device ID (verify communication, normal return 0xEF15)
+uint16_t W25Q16_ReadID() {
+  uint16_t id = 0;
+  digitalWrite(W25Q16_CS, LOW);
+  
+  SPI.transfer(W25Q_READ_ID);       // Send read ID command
+  SPI.transfer(0x00);               // Invalid address bit 1
+  SPI.transfer(0x00);               // Invalid address bit 2
+  SPI.transfer(0x00);               // Invalid address bit 3
+  
+  id |= (uint16_t)SPI.transfer(0xFF) << 8; // Manufacturer ID (0xEF)
+  id |= SPI.transfer(0xFF);                 // Device ID (0x15)
+  
+  digitalWrite(W25Q16_CS, HIGH);
+  return id;
+}
+
+// Sector erase (must erase before write, CH32V203 adapted delay)
+void W25Q16_SectorErase(uint32_t addr) {
+  if (addr > W25Q16_MAX_ADDR) return;
+  
+  W25Q16_WriteEnable();
+  W25Q16_WaitBusy();
+  
+  digitalWrite(W25Q16_CS, LOW);
+  SPI.transfer(W25Q_SECTOR_ERASE);          // Sector erase command
+  SPI.transfer((addr >> 16) & 0xFF);        // Address high byte
+  SPI.transfer((addr >> 8) & 0xFF);         // Address middle byte
+  SPI.transfer(addr & 0xFF);                // Address low byte
+  digitalWrite(W25Q16_CS, HIGH);
+  
+  W25Q16_WaitBusy(); // Wait for erase completion (about 0.1s)
+}
+
+// Page write (max 256 bytes at a time, no cross-page)
+void W25Q16_PageWrite(uint8_t *data, uint32_t addr, uint16_t len) {
+  if (addr > W25Q16_MAX_ADDR || len > W25Q16_PAGE_SIZE) return;
+  
+  W25Q16_WriteEnable();
+  W25Q16_WaitBusy();
+  
+  digitalWrite(W25Q16_CS, LOW);
+  SPI.transfer(W25Q_PAGE_PROGRAM);          // Page program command
+  SPI.transfer((addr >> 16) & 0xFF);        // Address high byte
+  SPI.transfer((addr >> 8) & 0xFF);         // Address middle byte
+  SPI.transfer(addr & 0xFF);                // Address low byte
+  
+  // Write data (CH32V203 SPI has no byte limit, loop directly)
+  for (uint16_t i = 0; i < len; i++) {
+    SPI.transfer(data[i]);
+  }
+  
+  digitalWrite(W25Q16_CS, HIGH);
+  W25Q16_WaitBusy();
+}
+
+// Read data (cross-page allowed, no length limit)
+void W25Q16_Read(uint8_t *buf, uint32_t addr, uint16_t len) {
+  if (addr > W25Q16_MAX_ADDR || len == 0) return;
+  
+  digitalWrite(W25Q16_CS, LOW);
+  SPI.transfer(W25Q_READ_DATA);             // Read data command
+  SPI.transfer((addr >> 16) & 0xFF);        // Address high byte
+  SPI.transfer((addr >> 8) & 0xFF);         // Address middle byte
+  SPI.transfer(addr & 0xFF);                // Address low byte
+  
+  // Read data
+  for (uint16_t i = 0; i < len; i++) {
+    buf[i] = SPI.transfer(0xFF);
+  }
+  
+  digitalWrite(W25Q16_CS, HIGH);
+}
+
+// Main function: initialization + read/write test
+void setup() {
+  // Initialize serial port (CH32V203 default 115200 baud rate, PA9=TX)
+  Serial.begin(115200);
+  while (!Serial); // Wait for serial port to be ready (CH32V203 adaptation)
+  
+  // Initialize CS pin
+  pinMode(W25Q16_CS, OUTPUT);
+  digitalWrite(W25Q16_CS, HIGH);
+  
+  // Initialize SPI (CH32V203 SPI1, 1MHz rate, adapted to W25Q16)
+  SPI.begin();
+  SPI.setClockDivider(SPI_CLOCK_DIV64); // CH32V203 main freq 72MHz, DIV16=4.5MHz (compatible with W25Q16)
+  SPI.setBitOrder(MSBFIRST);            // MSB first
+  SPI.setDataMode(SPI_MODE0);           // CPOL=0, CPHA=0 (W25Q16 standard)
+  
+  // 1. Read W25Q16 ID and verify
+  uint16_t w25q_id = W25Q16_ReadID();
+  Serial.print("W25Q16 ID: 0x");
+  Serial.println(w25q_id, HEX);
+  
+  // 修改为兼容0xEF14（W25Q8）和0xEF15（W25Q16）：
+  if (w25q_id != 0xEF15 && w25q_id != 0xEF14) {
+    Serial.println("Error: W25Q16 communication failed! Check wiring");
+    while (1); // Stop if communication fails
+  }
+  // 同时添加型号提示：
+  if (w25q_id == 0xEF14) {
+    Serial.println("Note: Detected W25Q8 (ID=0xEF14) instead of W25Q16");
+  } else if (w25q_id == 0xEF15) {
+    Serial.println("Note: Detected W25Q16 (ID=0xEF15)");
+  }
+  
+  // 2. Prepare test data
+  uint8_t write_data[32] = {"CH32V203 W25Q16 Test OK!"};
+  uint8_t read_data[32] = {0};
+  uint32_t test_addr = 0x000000; // Test address (sector 0)
+  
+  // 3. Erase sector
+  Serial.println("Start erasing sector...");
+  W25Q16_SectorErase(test_addr);
+  
+  // 4. Write test data
+  Serial.println("Start writing data...");
+  W25Q16_PageWrite(write_data, test_addr, 32);
+  
+  // 5. Read data
+  Serial.println("Start reading data...");
+  W25Q16_Read(read_data, test_addr, 32);
+  
+  // 6. Print result
+  Serial.print("Read data: ");
+  for (int i = 0; i < 32; i++) {
+    Serial.print((char)read_data[i]);
+  }
+  Serial.println();
+  
+  // 7. Verify data
+  bool is_success = true;
+  for (int i = 0; i < 32; i++) {
+    if (read_data[i] != write_data[i]) {
+      is_success = false;
+      break;
+    }
+  }
+  
+  if (is_success) {
+    Serial.println("Test success: W25Q16 read/write normal!");
+  } else {
+    Serial.println("Test failed: Data read/write mismatch!");
+  }
+}
+
+void loop() {
+  // No operation in loop
+  delay(1000);
+}

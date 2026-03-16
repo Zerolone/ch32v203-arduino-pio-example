@@ -1,0 +1,30 @@
+#include <Arduino.h>
+
+void setup() {
+  // 核心配置：将PD0配置为普通输出引脚（也可配置为输入）
+  // 输出模式：OUTPUT（推挽输出）
+  pinMode(PA15, OUTPUT);
+  
+  // 若需配置为输入模式（两种可选）：
+  // pinMode(PD0, INPUT);          // 浮空输入
+  // pinMode(PD0, INPUT_PULLUP);   // 上拉输入（推荐，防止引脚悬空）
+  
+  Serial.begin(115200);  
+  Serial.println("Hello, world!");
+}
+
+void loop() {
+  // 输出模式：控制PD0高低电平
+  digitalWrite(PA15, HIGH);  // PD0输出高电平
+  delay(500);
+  Serial1.println("PD0 = HIGH");
+  
+  digitalWrite(PA15, LOW);   // PD0输出低电平
+  delay(500);
+  Serial1.println("PD0 = LOW");
+
+  // 若为输入模式：读取PD0电平
+  // bool pd0_level = digitalRead(PD0);
+  // Serial.print("PD0 level: ");
+  // Serial.println(pd0_level);
+}
